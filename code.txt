@@ -1,0 +1,38 @@
+ --In local machine, run this code to copy liquor_sales.csv data file to linux server, replacing name where appropriate
+ scp Liquor_Sales.csv hliew2@129.146.230.230:/home/hliew2/Liqour_Sales.csv
+ 
+ --In hadoop shell, run the following to make a directory for csv file and put file into directory
+ hdfs dfs -mkdir Liquor_Sales
+ hdfs dfs -put Liquor_Sales.csv /user/hliew2/Liquor_Sales/
+ 
+ -- confirm file is in directory
+ hdfs dfs -ls Liquor_Sales
+ 
+Create External table if not exists raw_sales (
+invoice STRING, 
+date_recorded STRING,
+store_number INT,
+store_name STRING,
+address STRING,
+city STRING,
+zip_code STRING,
+store_location STRING,
+county_number TINYINT,
+county STRING,
+category INT,
+category_name STRING,
+vendor_number INT,
+vendor_name STRING,
+item_number INT,
+item_description STRING,
+pack TINYINT,
+bottle_volume SMALLINT,
+state_bottle_cost FLOAT,
+state_bottle_retail FLOAT,
+bottles_sold SMALLINT,
+sale FLOAT,
+volume_sold_liters FLOAT,
+volume_sold_gallons FLOAT )
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'
+STORED AS TEXTFILE LOCATION '/user/hliew2/Liquor_Sales/' 
+TBLPROPERTIES ('skip.header.line.count'='1');
