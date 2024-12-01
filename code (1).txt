@@ -1,0 +1,84 @@
+ --In local machine, run this code to copy liquor_sales.csv data file to linux server, replacing name where appropriate
+ scp Liquor_Sales.csv hliew2@129.146.230.230:/home/hliew2/Liqour_Sales.csv
+ 
+ -- Run this command to convert csv to tsv while retaining commas within quotations
+sed 's/\("[^"]*\),\([^"]*"\)/\1 COMMA_REPLACEMENT \2/g' Liquor_Sales.csv > temp.csv
+awk 'BEGIN {FS=","; OFS="\t"} {gsub(",", "\t"); print}' temp.csv > output.tsv
+sed 's/COMMA_REPLACEMENT/,/g' output.tsv > Liquor_Sales.tsv
+
+ 
+ --In hadoop shell, run the following to make a directory for csv file and put file into directory
+ hdfs dfs -mkdir Liquor_Sales
+ hdfs dfs -put Liquor_Sales.tsv /user/hliew2/Liquor_Sales/
+ 
+ -- confirm file is in directory
+ hdfs dfs -ls Liquor_Sales
+ 
+ -- Table to store tsv file data before cleaning
+Create External table if not exists raw_sales (
+invoice STRING, 
+date_recorded STRING,
+store_number INT,
+store_name STRING,
+address STRING,
+city STRING,
+zip_code STRING,
+store_location STRING,
+county_number TINYINT,
+county STRING,
+category INT,
+category_name STRING,
+vendor_number INT,
+vendor_name STRING,
+item_number INT,
+item_description STRING,
+pack TINYINT,
+bottle_volume SMALLINT,
+state_bottle_cost FLOAT,
+state_bottle_retail FLOAT,
+bottles_sold SMALLINT,
+sale FLOAT,
+volume_sold_liters FLOAT,
+volume_sold_gallons FLOAT )
+ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+STORED AS TEXTFILE LOCATION '/user/hliew2/Liquor_Sales/' 
+TBLPROPERTIES ('skip.header.line.count'='1');
+
+create view if not exists clean_sales as
+select
+date_recorded,
+store_name,
+address,
+city,
+zip_code,
+store_location,
+item_description,
+state_bottle_retail,
+bottles_sold,
+sale,
+volume_sold_gallons
+from raw_sales;
+
+create table IF NOT EXISTS sales_data
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY "\t"
+STORED AS TEXTFILE
+LOCATION "/user/hliew2/Sales_Output"as select
+ date_recorded,
+store_name,
+address,
+city,
+zip_code,
+store_location,
+item_description,
+state_bottle_retail,
+bottles_sold,
+sale,
+volume_sold_gallons
+from clean_sales;
+
+--retrieve file from hdfs
+ hdfs dfs -get /user/hliew2/Sales_Output/000000_0
+ 
+ --on local machine, download file
+ scp hliew2@129.146.230.230:/home/hliew2/sales_out.tsv 000000_0.tsv
