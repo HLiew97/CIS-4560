@@ -1,19 +1,30 @@
- --In local machine, run this code to copy liquor_sales.csv data file to linux server, replacing name where appropriate
- scp Liquor_Sales.csv hliew2@129.146.230.230:/home/hliew2/Liqour_Sales.csv
+--Download liquor_sales.csv from kaggle website
+https://www.kaggle.com/datasets/pigment/big-sales-data  
  
- -- Run this command to convert csv to tsv while retaining commas within quotations
+ -- Run this command to convert csv to tsv while retaining commas within quotations. his step is performed because the store_name column contains commas and causes data to be inserted incorrectly into the tables later if using csv format. 
 sed 's/\("[^"]*\),\([^"]*"\)/\1 COMMA_REPLACEMENT \2/g' Liquor_Sales.csv > temp.csv
 awk 'BEGIN {FS=","; OFS="\t"} {gsub(",", "\t"); print}' temp.csv > output.tsv
 sed 's/COMMA_REPLACEMENT/,/g' output.tsv > Liquor_Sales.tsv
 
+--In local machine, run this code to copy liquor_sales.csv data file to linux server, replacing name where appropriate. NOTE: you may need to change directory or move the downloaded file depending on where you save it when uploading. Depending on your upload speed this can take a while.
+ scp Liquor_Sales.tsv hliew2@129.146.230.230:/home/hliew2/Liqour_Sales.tsv
  
- --In hadoop shell, run the following to make a directory for csv file and put file into directory
- hdfs dfs -mkdir Liquor_Sales
- hdfs dfs -put Liquor_Sales.tsv /user/hliew2/Liquor_Sales/
+--In another terminal, ssh to linux server 
+ssh hliew2@129.146.230.230 
+
+--In hadoop shell, run the following to make a directory for csv file and put file into directory
+hdfs dfs -mkdir Liquor_Sales
+hdfs dfs -put Liquor_Sales.tsv /user/hliew2/Liquor_Sales/
+
+-- confirm file is in directory
+hdfs dfs -ls Liquor_Sales
  
- -- confirm file is in directory
- hdfs dfs -ls Liquor_Sales
- 
+--In another terminal, use hive(beeline) to create tables for data manipulation 
+Beeline 
+
+--Use appropriate data base for Beeline. 
+Use hliew2; 
+
  -- Table to store tsv file data before cleaning
 Create External table if not exists raw_sales (
 invoice STRING, 
@@ -44,9 +55,13 @@ ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
 STORED AS TEXTFILE LOCATION '/user/hliew2/Liquor_Sales/' 
 TBLPROPERTIES ('skip.header.line.count'='1');
 
-create view if not exists clean_sales as
-select
-date_recorded,
+--Query to confirm data was loaded correctly 
+SELECT * from raw_sales LIMIT 5; 
+
+--  Create View to reformat date_recorded column into Unix DATE data type format. NOTE: Data type for date_recorded column is still string, will be changed next table. 
+CREATE VIEW IF NOT EXISTS clean_sales AS
+SELECT
+FROM_UNIXTIME(UNIX_TIMESTAMP(date_recorded, 'MM/dd/yyyy'), 'yyyy-MM-dd') AS formatted_date,
 store_name,
 address,
 city,
@@ -57,14 +72,18 @@ state_bottle_retail,
 bottles_sold,
 sale,
 volume_sold_gallons
-from raw_sales;
+FROM raw_sales; 
 
-create table IF NOT EXISTS sales_data
+--Query to confirm data was formatted correctly
+SELECT * from clean_sales LIMIT 5; 
+
+-- Create Table to remove columns not required for output and analysis and to reformat formatted_date column to DATE data type. Table is also stored in Sales_Output folder in HDFS 
+CREATE TABLE IF NOT EXISTS sales_data
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY "\t"
 STORED AS TEXTFILE
-LOCATION "/user/hliew2/Sales_Output"as select
- date_recorded,
+LOCATION "/user/hliew2/Sales_Output" AS SELECT
+CAST((formatted_date) AS DATE) AS date_recorded,
 store_name,
 address,
 city,
@@ -75,10 +94,28 @@ state_bottle_retail,
 bottles_sold,
 sale,
 volume_sold_gallons
-from clean_sales;
+FROM clean_sales;
 
---retrieve file from hdfs
- hdfs dfs -get /user/hliew2/Sales_Output/000000_0
- 
- --on local machine, download file
- scp hliew2@129.146.230.230:/home/hliew2/sales_out.tsv 000000_0.tsv
+--Query to confirm data was formatted correctly
+SELECT * from sales_data LIMIT 5;
+
+
+--This indicates top items ever sold in a single day and how much they sold.
+SELECT ROUND(sum(sale),2) AS total_sales, item_description, date_recorded
+FROM sales_data
+GROUP BY date_recorded, item_description
+ORDER BY total_sales DESC
+LIMIT 5; 
+
+--This indicates top selling items subdivided by city. Total sale indicates how much each item was sold for each city. The results here only show Des Moines because Des Moines sells the most alcohol.
+SELECT ROUND(sum(sale),2) AS total_sales, city, item_description
+FROM sales_data
+GROUP BY city, item_description
+ORDER BY total_sales DESC
+LIMIT 5;
+
+--In Linux terminal, retrieve file from hdfs
+hdfs dfs -get /user/hliew2/Sales_Output/000000_0
+
+--on local machine, download file
+scp hliew2@129.146.230.230:/home/hliew2/sales_out.tsv 000000_0.tsv
